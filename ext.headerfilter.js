@@ -21,7 +21,9 @@
             buttonImage: "../images/down.png",
             filterImage: "../images/filter.png",
             sortAscImage: "../images/sort-asc.png",
-            sortDescImage: "../images/sort-desc.png"
+            sortDescImage: "../images/sort-desc.png",
+            useSearchBox: false,
+            allowGrouping: false
         };
         var $menu;
 
@@ -76,7 +78,7 @@
                 .remove();
         }
 
-        function addMenuItem(menu, columnDef, title, command, image) {
+        function addMenuItem(menu, columnDef, title, command, image, useFA) {
             var $item = $("<div class='slick-header-menuitem'>")
                          .data("command", command)
                          .data("column", columnDef)
@@ -87,12 +89,27 @@
                          .appendTo($item);
 
             if (image) {
-                $icon.css("background-image", "url(" + image + ")");
+                if (usefa)
+                    $icon.addClass('fa').addClass(image);   // image is treated as a Font-Awesome class instead of an img src
+                else
+                    $icon.css("background-image", "url(" + image + ")");
             }
 
             $("<span class='slick-header-menucontent'>")
              .text(title)
              .appendTo($item);
+        }
+        
+        function addSearchBox(menu, columnDef, value) {
+            var $searchBox = $('<input type="search" class="slick-search-box" placeholder="Search..." />')
+                .data('column', columnDef)
+                .data('command', 'search')
+                .appendTo(menu)
+                .wrap('<div></div>');
+
+            if (typeof value == 'string') {
+                $searchBox.val(value);
+            }
         }
 
         function addMenuInput(menu, columnDef) {
@@ -155,6 +172,19 @@
 
             addMenuItem($menu, columnDef, 'Sort Ascending', 'sort-asc', options.sortAscImage);
             addMenuItem($menu, columnDef, 'Sort Descending', 'sort-desc', options.sortDescImage);
+            
+            if (options.allowGrouping) {
+                if (isColumnGrouped(columnDef)) {
+                    addMenuItem($menu, columnDef, 'Un-Group', 'ungroup', 'fa-unlink', true);
+                } else {
+                    addMenuItem($menu, columnDef, 'Group By', 'group', 'fa-link', true);
+                }
+            }
+            
+            if (options.useSearchBox) {
+                addSearchBox($menu, columnDef, workingFilters);
+            }
+            
             addMenuInput($menu, columnDef);
 
             var filterOptions = "<label><input type='checkbox' value='-1' />(Select All)</label>";
@@ -170,11 +200,14 @@
             var $filter = $("<div class='filter'>")
                            .append($(filterOptions))
                            .appendTo($menu);
-
+            
+            if (typeof workingFilters == 'string')
+                $filter.hide();
+                
             $('<button>OK</button>')
                 .appendTo($menu)
                 .bind('click', function (ev) {
-                    columnDef.filterValues = workingFilters.splice(0);
+                    columnDef.filterValues = (workingFilters.splice) ? workingFilters.splice(0) : workingFilters;
                     setButtonImage($menuButton, columnDef.filterValues.length > 0);
                     handleApply(ev, columnDef);
                 });
@@ -182,7 +215,7 @@
             $('<button>Clear</button>')
                 .appendTo($menu)
                 .bind('click', function (ev) {
-                    columnDef.filterValues.length = 0;
+                    columnDef.filterValues = [];
                     setButtonImage($menuButton, false);
                     handleApply(ev, columnDef);
                 });
@@ -194,17 +227,38 @@
             $(':checkbox', $filter).bind('click', function () {
                 workingFilters = changeWorkingFilter(filterItems, workingFilters, $(this));
             });
+            
+            var setCheckboxVisibility = function () {
+                if (this.value.length)
+                    $filter.slideUp();
+                else
+                    $filter.slideDown();
+            };
+            
+            $('input.slick-search-box', $menu)
+                .keyup(setCheckboxVisibility)
+                .bind('search', setCheckboxVisibility).blur(function () {
+                if (this.value) {
+                    workingFilters = this.value;
+                } else {
+                    workingFilters = [];
+                    $(':checkbox[checked]', $filter).each(function (idx, item) {
+                        workingFilters.push($(item).val());
+                    });
+                }
+            });
 
             var offset = $(this).offset();
             var left = offset.left - $menu.width() + $(this).width() - 8;
+            var top = offset.top + $(this).height();
+            var maxHeight = $(window).height() - top - (parseInt($menu.css('padding').replace('px', '')) * 2);
 
-            var menutop = offset.top + $(this).height();
-
-            if (menutop + offset.top > $(window).height()) {
-                menutop -= ($menu.height() + $(this).height() + 8);
-            }
-            $menu.css("top", menutop)
+            $menu.css("top", top)
                  .css("left", (left > 0 ? left : 0));
+                 
+            if (maxHeight < $menu.outerHeight()) {
+                $menu.css("overflow-y", "scroll").css("height", maxHeight);
+            }
         }
 
         function columnsResized() {
